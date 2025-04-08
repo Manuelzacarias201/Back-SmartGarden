@@ -13,9 +13,18 @@ import (
 	"ApiSmart/internal/adapters/handlers"
 	"ApiSmart/internal/adapters/repositories/mysql"
 	"ApiSmart/internal/core/services"
+	wsService "ApiSmart/internal/core/services/websocket"
 	"ApiSmart/pkg/database"
+
 	"github.com/gin-gonic/gin"
+	gorillaWs "github.com/gorilla/websocket"
 )
+
+var upgrader = gorillaWs.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true // En producción, configurar según necesidades de seguridad
+	},
+}
 
 func main() {
 	cfg := config.LoadConfig()
@@ -36,7 +45,21 @@ func main() {
 	authHandler := handlers.NewAuthHandler(authService)
 	sensorHandler := handlers.NewSensorHandler(sensorService)
 
+	// Inicializar servidor WebSocket
+	wsServer := wsService.NewServer()
+	go wsServer.Run()
+
 	router := gin.Default()
+
+	// Rutas WebSocket
+	router.GET("/ws", func(c *gin.Context) {
+		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+		if err != nil {
+			log.Printf("Error al actualizar conexión: %v", err)
+			return
+		}
+		wsServer.HandleWebSocket(conn)
+	})
 
 	router.POST("/api/register", authHandler.Register)
 	router.POST("/api/login", authHandler.Login)
